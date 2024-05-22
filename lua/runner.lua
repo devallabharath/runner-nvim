@@ -3,18 +3,13 @@ local v = vim
 local fn = v.fn
 local api = v.api
 local config = {
-  cmds = {
-    internal = {},
-    external = {}
-  },
-
+  cmds = {},
   behavior = {
     default     = "float",
     startinsert = false,
     wincmd      = false,
     autosave    = false
   },
-
   ui = {
     float = {
       border   = "none",
@@ -26,13 +21,11 @@ local config = {
       y        = 0.5,
       winblend = 0
     },
-
     terminal = {
       position = "bot",
       line_no  = false,
       size     = 10
     },
-
     quickfix = {
       position = "bot",
       size     = 10
@@ -115,7 +108,8 @@ local function float(cmd)
 end
 
 local function term(cmd)
-  v.cmd(config.ui.terminal.position .. " " .. config.ui.terminal.size .. "new | term " .. cmd)
+  v.cmd(config.ui.terminal.position .. " " .. config.ui.terminal.size .. "new")
+  v.fn.termopen(cmd)
 
   M.buf = api.nvim_get_current_buf()
 
@@ -127,7 +121,8 @@ local function term(cmd)
   end
 
   if not config.ui.terminal.line_no then
-    v.cmd("setlocal nonumber | setlocal norelativenumber")
+    v.opt_local.number = false
+    v.opt_local.relativenumber = false
   end
 
   if config.behavior.wincmd then
@@ -161,24 +156,11 @@ local function formatCmd(cmd)
   return cmd
 end
 
-local function internal(cmd)
-  cmd = cmd or config.cmds.internal[v.bo.filetype]
-
-  if not cmd then
-    v.cmd("echohl ErrorMsg | echo 'Error: Invalid command' | echohl None")
-    return
-  end
-
-  if config.behavior.autosave then
-    v.cmd("silent write")
-  end
-
-  cmd = formatCmd(cmd)
-  v.cmd(cmd)
-end
-
 local function executeCmd(mode, cmd)
   if cmd == nil then return end
+  if cmd:sub(1, 1) == ":" then
+    mode = "internal"
+  end
   cmd = formatCmd(cmd)
   if mode == "float" then
     float(cmd)
@@ -188,6 +170,8 @@ local function executeCmd(mode, cmd)
     quickfix(cmd)
   elseif mode == "terminal" then
     term(cmd)
+  elseif type == "internal" then
+    v.cmd(cmd)
   else
     v.cmd("echohl ErrorMsg | echo 'Error: Invalid type' | echohl None")
   end
@@ -201,8 +185,8 @@ local function makeList(data)
   return list
 end
 
-local function run(cmd_type, cmd)
-  cmd = cmd or config.cmds.external[v.bo.filetype]
+local function run(mode, cmd)
+  cmd = cmd or config.cmds[v.bo.filetype]
 
   if not cmd then
     v.cmd("echohl ErrorMsg | echo 'Error: Invalid command' | echohl None")
@@ -218,15 +202,15 @@ local function run(cmd_type, cmd)
       makeList(cmd),
       { prompt = "Select a command ", kind = "Runner" },
       function(selected)
-        executeCmd(cmd_type, selected:match(" :: (.*)$"))
+        executeCmd(mode, selected:match(" :: (.*)$"))
       end
     )
   else
-    executeCmd(cmd_type, cmd)
+    executeCmd(mode, cmd)
   end
 end
 
-local function run_custom(cmd_type)
+local function run_custom(mode)
   if config.behavior.autosave then
       v.cmd("silent write")
   end
@@ -234,12 +218,12 @@ local function run_custom(cmd_type)
   v.ui.input(
     { prompt = "Run command ", kind = "Runner" },
     function(input)
-      executeCmd(cmd_type, input)
+      executeCmd(mode, input)
     end
   )
 end
 
-local function project(type, file)
+local function project(mode, file)
   local json = file:read("*a")
   local status, table = pcall(fn.json_decode, json)
   io.close(file)
@@ -249,52 +233,26 @@ local function project(type, file)
     return
   end
 
-  if type == "internal" then
-    local cmd = table.internal[v.bo.filetype]
-    cmd = formatCmd(cmd)
-
-    internal(cmd)
-    return
-  end
-
-  local cmd = table.external[v.bo.filetype]
+  local cmd = table.cmds[v.bo.filetype]
   cmd = formatCmd(cmd)
-
-  run(type, cmd)
+  run(mode, cmd)
 end
 
-function M.Runner(type)
+function M.Runner(mode)
   local file = io.open(fn.expand('%:p:h') .. "/.runner.json", "r")
-
-  -- Check if the filetype is in config.cmds.internal
-  if v.tbl_contains(v.tbl_keys(config.cmds.internal), v.bo.filetype) then
-    -- Exit if the type was passed and isn't "internal"
-    if type and type ~= "internal" then
-      v.cmd("echohl ErrorMsg | echo 'Error: Invalid type for internal command' | echohl None")
-      return
-    end
-    type = "internal"
-  else
-    type = type or config.behavior.default
-  end
+  mode = mode or config.behavior.default
 
   if file then
-    project(type, file)
+    project(mode, file)
     return
   end
 
-  if type == "internal" then
-    internal()
-    return
-  end
-
-  run(type)
+  run(mode)
 end
 
-function M.RunnerRun(type)
-  type = type or config.behavior.default
-
-  run_custom(type)
+function M.RunnerRun(mode)
+  mode = mode or config.behavior.default
+  run_custom(mode)
 end
 
 return M
