@@ -8,7 +8,8 @@ local config = {
     default     = "float",
     startinsert = false,
     wincmd      = false,
-    autosave    = false
+    autosave    = false,
+    terminal_cmd    = "default"
   },
   ui = {
     float = {
@@ -83,7 +84,8 @@ local function float(cmd)
     height   = dim.height,
     width    = dim.width,
     col      = dim.col,
-    row      = dim.row
+    row      = dim.row,
+    title    = " " .. cmd .. " "
   })
 
   api.nvim_win_set_option(M.win, "winhl", ("Normal:%s"):format(config.ui.float.winhl))
@@ -108,6 +110,10 @@ local function float(cmd)
 end
 
 local function term(cmd)
+  local terminal_cmd = config.behavior.terminal_cmd
+  if terminal_cmd ~= 'default' then
+    return v.cmd(string.format("%s %s", terminal_cmd, cmd))
+  end
   v.cmd(config.ui.terminal.position .. " " .. config.ui.terminal.size .. "new")
   v.fn.termopen(cmd)
 
