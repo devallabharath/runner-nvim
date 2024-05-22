@@ -17,14 +17,14 @@ local config = {
 
   ui = {
     float = {
-      border    = "none",
-      winhl     = "Normal",
-      borderhl  = "FloatBorder",
-      height    = 0.8,
-      width     = 0.8,
-      x         = 0.5,
-      y         = 0.5,
-      winblend  = 0
+      border   = "none",
+      winhl    = "Normal",
+      borderhl = "FloatBorder",
+      height   = 0.8,
+      width    = 0.8,
+      x        = 0.5,
+      y        = 0.5,
+      winblend = 0
     },
 
     terminal = {
@@ -98,7 +98,8 @@ local function float(cmd)
   api.nvim_win_set_option(M.win, "winblend", config.ui.float.winblend)
 
   api.nvim_buf_set_option(M.buf, "filetype", "Runner")
-  api.nvim_buf_set_keymap(M.buf, 'n', '<ESC>', '<cmd>:lua vim.api.nvim_win_close(' .. M.win .. ', true)<CR>', { silent = true })
+  api.nvim_buf_set_keymap(M.buf, 'n', '<ESC>', '<cmd>:lua vim.api.nvim_win_close(' .. M.win .. ', true)<CR>',
+    { silent = true })
 
   fn.termopen(cmd)
 
@@ -176,7 +177,25 @@ local function internal(cmd)
   v.cmd(cmd)
 end
 
-local function run(type, cmd)
+local function execute_command(cmd_type, selected_cmd)
+  if selected_cmd == nil then
+    return
+  end
+  selected_cmd = substitute(selected_cmd)
+  if cmd_type == "float" then
+    float(selected_cmd)
+  elseif cmd_type == "bang" then
+    v.cmd("!" .. selected_cmd)
+  elseif cmd_type == "quickfix" then
+    quickfix(selected_cmd)
+  elseif cmd_type == "terminal" then
+    term(selected_cmd)
+  else
+    v.cmd("echohl ErrorMsg | echo 'Error: Invalid type' | echohl None")
+  end
+end
+
+local function run(cmd_type, cmd)
   cmd = cmd or config.cmds.external[v.bo.filetype]
 
   if not cmd then
@@ -188,22 +207,23 @@ local function run(type, cmd)
     v.cmd("silent write")
   end
 
-  cmd = substitute(cmd)
-  if type == "float" then
-    float(cmd)
-    return
-  elseif type == "bang" then
-    v.cmd("!" .. cmd)
-    return
-  elseif type == "quickfix" then
-    quickfix(cmd)
-    return
-  elseif type == "terminal" then
-    term(cmd)
-    return
+  if type(cmd) == "table" then
+    v.ui.select(cmd, { prompt = "Select a command: ", kind = "Runner" }, function(selected_cmd)
+      execute_command(cmd_type, selected_cmd)
+    end)
+  else
+    execute_command(cmd_type, cmd)
+  end
+end
+
+local function run_custom(cmd_type)
+  if config.behavior.autosave then
+      v.cmd("silent write")
   end
 
-  v.cmd("echohl ErrorMsg | echo 'Error: Invalid type' | echohl None")
+  v.ui.input({ prompt = "Run command: ", kind = "Runner" }, function(selected_cmd)
+      execute_command(cmd_type, selected_cmd)
+  end)
 end
 
 local function project(type, file)
@@ -256,6 +276,12 @@ function M.Runner(type)
   end
 
   run(type)
+end
+
+function M.RunnerRun(type)
+  type = type or config.behavior.default
+
+  run_custom(type)
 end
 
 return M
