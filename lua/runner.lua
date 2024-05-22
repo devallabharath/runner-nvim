@@ -147,7 +147,7 @@ local function quickfix(cmd)
   end
 end
 
-local function substitute(cmd)
+local function formatCmd(cmd)
   cmd = cmd:gsub("%%", '"' .. fn.expand('%') .. '"');
   cmd = cmd:gsub("$fileBase", '"' .. fn.expand('%:r') .. '"');
   cmd = cmd:gsub("$filePath", '"' .. fn.expand('%:p') .. '"');
@@ -173,26 +173,32 @@ local function internal(cmd)
     v.cmd("silent write")
   end
 
-  cmd = substitute(cmd)
+  cmd = formatCmd(cmd)
   v.cmd(cmd)
 end
 
-local function execute_command(cmd_type, selected_cmd)
-  if selected_cmd == nil then
-    return
-  end
-  selected_cmd = substitute(selected_cmd)
-  if cmd_type == "float" then
-    float(selected_cmd)
-  elseif cmd_type == "bang" then
-    v.cmd("!" .. selected_cmd)
-  elseif cmd_type == "quickfix" then
-    quickfix(selected_cmd)
-  elseif cmd_type == "terminal" then
-    term(selected_cmd)
+local function executeCmd(mode, cmd)
+  if cmd == nil then return end
+  cmd = formatCmd(cmd)
+  if mode == "float" then
+    float(cmd)
+  elseif mode == "bang" then
+    v.cmd("!" .. cmd)
+  elseif mode == "quickfix" then
+    quickfix(cmd)
+  elseif mode == "terminal" then
+    term(cmd)
   else
     v.cmd("echohl ErrorMsg | echo 'Error: Invalid type' | echohl None")
   end
+end
+
+local function makeList(data)
+  local list = {}
+  for key, val in pairs(data) do
+    table.insert(list, key .. " :: " .. val)
+  end
+  return list
 end
 
 local function run(cmd_type, cmd)
@@ -208,11 +214,15 @@ local function run(cmd_type, cmd)
   end
 
   if type(cmd) == "table" then
-    v.ui.select(cmd, { prompt = "Select a command: ", kind = "Runner" }, function(selected_cmd)
-      execute_command(cmd_type, selected_cmd)
-    end)
+    v.ui.select(
+      makeList(cmd),
+      { prompt = "Select a command ", kind = "Runner" },
+      function(selected)
+        executeCmd(cmd_type, selected:match(" :: (.*)$"))
+      end
+    )
   else
-    execute_command(cmd_type, cmd)
+    executeCmd(cmd_type, cmd)
   end
 end
 
@@ -221,9 +231,12 @@ local function run_custom(cmd_type)
       v.cmd("silent write")
   end
 
-  v.ui.input({ prompt = "Run command: ", kind = "Runner" }, function(selected_cmd)
-      execute_command(cmd_type, selected_cmd)
-  end)
+  v.ui.input(
+    { prompt = "Run command ", kind = "Runner" },
+    function(input)
+      executeCmd(cmd_type, input)
+    end
+  )
 end
 
 local function project(type, file)
@@ -238,14 +251,14 @@ local function project(type, file)
 
   if type == "internal" then
     local cmd = table.internal[v.bo.filetype]
-    cmd = substitute(cmd)
+    cmd = formatCmd(cmd)
 
     internal(cmd)
     return
   end
 
   local cmd = table.external[v.bo.filetype]
-  cmd = substitute(cmd)
+  cmd = formatCmd(cmd)
 
   run(type, cmd)
 end
