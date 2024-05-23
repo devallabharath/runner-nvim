@@ -208,6 +208,7 @@ local function run(mode, cmd)
       makeList(cmd),
       { prompt = "Select a command ", kind = "Runner" },
       function(selected)
+        if not selected then return end
         executeCmd(mode, selected:match(" :: (.*)$"))
       end
     )
